@@ -1,0 +1,323 @@
+// 修复后的计数器（独立状态）
+class Counter implements m.ClassComponent {
+  private count = 0;
+
+  view() {
+    return (
+      <div>
+        <div class="text-red-500 text-xl mb-4">计数器: {this.count}</div>
+        <button
+          class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mb-6"
+          onclick={(e: Event & { redraw?: boolean }) => {
+            this.count++;
+          }}
+        >
+          增加 (+)
+        </button>
+      </div>
+    );
+  }
+}
+
+// chrome插件异步存储器
+const chromeStorage: m.Component<{}, { value: string }> & { value: string } = {
+  value: "123",
+
+  view() {
+    return (
+      <div>
+        {this.value}
+        <input
+          value={this.value}
+          oninput={(e: Event & { target: { value: string } }) =>
+            (this.value = e.target.value)
+          }
+        />
+        <button
+          onclick={() => {
+            chrome.storage.sync.set({ liceal: this.value }, () => {
+              console.log("存储 liceal", this.value);
+            });
+          }}
+        >
+          存储
+        </button>
+        <button
+          onclick={async () => {
+            chrome.storage.sync.get(["liceal"], (res) => {
+              console.log(res);
+            });
+          }}
+        >
+          读取
+        </button>
+      </div>
+    );
+  },
+};
+
+class Upload implements m.ClassComponent {
+  private uploadedFiles: File[] = [];
+  private isDragging = false;
+  private uploadStatus: "" | "uploading" | "success" | "error" = "";
+  private uploadedUrls: string[] = []; // 存储上传后的URL
+
+  private readFileAsBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // 移除 data URL 前缀
+        const base64Content = result.split(",")[1];
+        resolve(base64Content);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  private handleUpload = async () => {
+    console.log(this.uploadedFiles);
+    // 你需要替换这些值
+    const owner = "liceal";
+    const repo = "cloud_image";
+    const branch = "master"; // 或你的默认分支名
+    const token =
+      "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"; // 需要有repo权限
+
+    // 创建文件路径（可以按日期组织）
+    const file = this.uploadedFiles[0];
+    const date = new Date();
+    const filePath = `uploads/${date.getFullYear()}-${date.getMonth() + 1
+      }-${date.getDate()}/${file.name}`;
+
+    // 读取文件内容并转为Base64
+    const fileContent = await this.readFileAsBase64(file);
+
+    // GitHub API 请求
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `token ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: `Add ${file.name}`,
+          content: fileContent,
+          branch: branch,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.content.download_url;
+  };
+
+  oncreate() {
+    document.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      this.isDragging = true;
+      m.redraw();
+    });
+    document.addEventListener("dragleave", (e) => {
+      e.preventDefault();
+      this.isDragging = false;
+      m.redraw();
+    });
+    document.addEventListener("drop", (e) => {
+      e.preventDefault();
+      this.isDragging = false;
+      if (e.dataTransfer?.files) {
+        this.uploadedFiles = [
+          ...this.uploadedFiles,
+          ...Array.from(e.dataTransfer.files),
+        ];
+        m.redraw();
+      }
+    });
+  }
+  view() {
+    return (
+      <div>
+        {/* 拖拽上传区域（保持不变） */}
+        <div
+          class={[
+            "border-2 border-dashed rounded-lg p-8 text-center transition-colors",
+            this.isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300",
+          ].join(" ")}
+        >
+          {this.uploadedFiles.length === 0 ? (
+            <div>
+              <div class="text-gray-600">
+                拖拽文件到此处
+                <br />
+                <span class="text-sm text-gray-400">(支持多文件)</span>
+              </div>
+            </div>
+          ) : (
+            <div class="text-green-500">
+              已选择 {this.uploadedFiles.length} 个文件
+            </div>
+          )}
+        </div>
+
+        {/* 文件列表展示（保持不变） */}
+        {this.uploadedFiles.length > 0 && (
+          <div class="mt-4 space-y-2">
+            <div class="font-medium text-gray-700">已拖拽文件:</div>
+            <ul class="max-h-40 overflow-y-auto">
+              {this.uploadedFiles.map((file, index) => (
+                <li
+                  key={index}
+                  class="flex items-center p-2 bg-gray-100 rounded hover:bg-gray-200"
+                >
+                  <span class="flex-1 truncate">{file.name}</span>
+                  <span class="text-xs text-gray-500 ml-2">
+                    {(file.size / 1024).toFixed(2)} KB
+                  </span>
+                  <button
+                    class="ml-2 text-red-500 hover:text-red-700"
+                    onclick={() => {
+                      this.uploadedFiles = this.uploadedFiles.filter(
+                        (_, i) => i !== index
+                      );
+                      m.redraw();
+                    }}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* 新增的上传按钮和状态显示 */}
+        {this.uploadedFiles.length > 0 && (
+          <div class="mt-4 space-y-2">
+            <button
+              class={[
+                "w-full py-2 px-4 rounded",
+                this.uploadStatus === "uploading"
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-green-500 hover:bg-green-600 text-white",
+              ].join(" ")}
+              onclick={this.handleUpload}
+              disabled={this.uploadStatus === "uploading"}
+            >
+              {this.uploadStatus === "uploading"
+                ? "上传中..."
+                : "上传到Vercel Blob"}
+            </button>
+
+            {this.uploadStatus === "success" && (
+              <div class="p-2 bg-green-100 text-green-800 rounded">
+                <div class="font-bold">上传成功！</div>
+                <div class="text-sm mt-1">
+                  {this.uploadedUrls.map((url) => (
+                    <div class="truncate">{url}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {this.uploadStatus === "error" && (
+              <div class="p-2 bg-red-100 text-red-800 rounded">
+                上传失败，请重试
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+}
+
+// class Files implements m.ClassComponent {
+//   // constructor() {
+//   //   this.loadList();
+//   // }
+
+//   private files: FileInfo[] = [];
+//   private shaToFile: { [key: string]: FileInfo } = {};
+//   private async loadList() {
+//     const res = await getFiles();
+//     this.files = res;
+//     // 转成对象 has
+//     res.forEach((v) => {
+//       this.shaToFile[v.sha] = v;
+//     });
+//     m.redraw();
+//   }
+
+//   private openImg(file: FileInfo) {
+//     console.log("打开图片");
+
+//     const dialog = document.querySelector("#dialog") as HTMLDialogElement;
+//     if (dialog) {
+//       dialog.showModal();
+//       m.render(
+//         dialog,
+//         <img
+//           src={file.download_url}
+//           class="max-w-80vw max-h-80vh object-contain"
+//           onclick={(e: Event) => e.stopPropagation()}
+//         />
+//       );
+//     }
+//   }
+
+//   private async openDir(file: FileInfo, e: ToggleEvent) {
+//     console.log(e.newState);
+//     if (e.newState === "open") {
+//       const res = await getTreeFiles(file.git_url);
+//       console.log(res);
+//     }
+//   }
+
+//   oninit(vnode: m.Vnode<{}, this>) {
+//     this.loadList();
+//   }
+
+//   view() {
+//     return (
+//       <div class="flex flex-col gap-2">
+//         {this.files.map((file) => (
+//           <div class="flex items-center gap-2">
+//             {/* <a href={file.url} target="_blank" class="text-blue-500">
+//               {file.name}
+//             </a> */}
+//             {file.type === "file" ? (
+//               <img
+//                 src={file.download_url}
+//                 class="w-10 h-10"
+//                 onclick={() => this.openImg(file)}
+//               />
+//             ) : (
+//               // <div
+//               //   class="i-mdi:file-alert text-blue w-10 h-10"
+//               //   onclick={() => this.openDir(file)}
+//               // />
+//               <details ontoggle={(e: ToggleEvent) => this.openDir(file, e)}>
+//                 <summary>{file.name}</summary>
+//               </details>
+//             )}
+//           </div>
+//         ))}
+
+//         <dialog
+//           id="dialog"
+//           onclick={function (this: HTMLDialogElement) {
+//             this.close();
+//           }}
+//         ></dialog>
+//       </div>
+//     );
+//   }
+// }

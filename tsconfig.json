@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "ES6",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "jsx": "preserve", // 保持 JSX 不变（需要后续转换）
+    "jsxFactory": "m" // 转换时使用 m() 函数
+  },
+  "exclude": ["node_modules"]
+}
