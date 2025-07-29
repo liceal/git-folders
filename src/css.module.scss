@@ -1,7 +1,7 @@
 .container {
   width: 350px;
   height: 300px;
-  column-count: 4;
+  // column-count: 4;
   /* columns: 100px auto; */
 
   /* column-width: 3; */
@@ -14,10 +14,12 @@
 
 .box {
   /* width: 100px; */
-  height: 100px;
+  // height: 100px;
+  height: auto;
+  aspect-ratio: 1/1;
   /* 可选：如果你希望每个 box 不被拆开显示在两列中 */
   /* break-inside: avoid; */
-  margin-top: 5px;
+  // margin-top: 5px;
   transition: margin-top 0.1s;
   background-image: url("your-image.jpg");
   background-size: cover; /* 图片覆盖整个容器 */

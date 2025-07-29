@@ -234,18 +234,34 @@ class Upload implements m.Component {
 
 class PreviewImg implements m.Component {
   private images = [] as FileTreeItem[];
-  async oncreate(vnode: m.VnodeDOM<{}, m._NoLifecycle<this & {}>>) {
+
+  private columnCount = 4;
+  async oncreate(vnode: m.VnodeDOM) {
     this.images = await getAllImage();
     console.log(this.images);
     m.redraw();
     const previewImg = document.getElementById("previewImg");
     if (previewImg) {
-      previewImg.addEventListener("wheel", function (e: WheelEvent) {
+      previewImg.addEventListener("wheel", (e: WheelEvent) => {
         const box1 = previewImg.firstChild as HTMLElement;
 
         e.preventDefault(); // 阻止默认滚动行为
 
         let currentMargin = parseInt(window.getComputedStyle(box1).marginTop);
+        if (e.ctrlKey) {
+          if (e.deltaY > 0) {
+            console.log("小");
+            this.columnCount++;
+          } else {
+            console.log("大");
+            if (this.columnCount > 1) {
+              this.columnCount--;
+            }
+          }
+          m.redraw();
+
+          return;
+        }
 
         if (e.deltaY > 0) {
           // 向下滚动
@@ -265,14 +281,37 @@ class PreviewImg implements m.Component {
   view() {
     return [
       <button onclick={() => (isPreviewImg = false)}>返回</button>,
-      <div id="previewImg" class={[styles.container, "bg-gray-1"].join(" ")}>
-        {this.images.map((file) => (
-          <div
-            class={`${styles.box} cursor-pointer`}
-            style={`background-image:url(${file.previewUrl})`}
-            onclick={() => AppRef.openImg(file.previewUrl as string)}
-          ></div>
-        ))}
+      <div
+        id="previewImg"
+        className={[styles.container, "bg-gray-1"].join(" ")}
+        style={{ columnCount: this.columnCount }}
+      >
+        {this.images.map((file, index) => {
+          // 动态设置 border-image 渐变的颜色线
+          const step = 30; // 调整步长，控制颜色变化幅度
+          const saturation = 90; // 饱和度更高，颜色更鲜艳（80~100%）
+          const lightness = 50; // 亮度适中，避免过亮或过暗（40~60%）
+
+          const borderImageStyle = `linear-gradient(
+            to bottom,
+            hsl(${index * step}, ${saturation}%, ${lightness}%),
+            hsl(${(index + 1) * step}, ${saturation}%, ${lightness}%)
+          ) 1`;
+
+          return (
+            <div
+              key={index}
+              className={`${styles.box} cursor-pointer`}
+              style={{
+                backgroundImage: `url(${file.previewUrl})`,
+                borderImage: borderImageStyle,
+                borderLeft: "3px dotted gray",
+                borderRight: "3px dotted gray",
+              }}
+              onclick={() => AppRef.openImg(file.previewUrl as string)}
+            ></div>
+          );
+        })}
       </div>,
     ];
   }
