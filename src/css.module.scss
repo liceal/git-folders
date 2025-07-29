@@ -1,0 +1,26 @@
+.container {
+  width: 350px;
+  height: 300px;
+  column-count: 4;
+  /* columns: 100px auto; */
+
+  /* column-width: 3; */
+  column-gap: 5px;
+  padding: 5px;
+  column-fill: auto;
+
+  overflow: hidden;
+}
+
+.box {
+  /* width: 100px; */
+  height: 100px;
+  /* 可选：如果你希望每个 box 不被拆开显示在两列中 */
+  /* break-inside: avoid; */
+  margin-top: 5px;
+  transition: margin-top 0.1s;
+  background-image: url("your-image.jpg");
+  background-size: cover; /* 图片覆盖整个容器 */
+  background-position: center;
+  background-repeat: no-repeat;
+}

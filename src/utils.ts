@@ -85,3 +85,44 @@ export function addDateToFileAdvanced(fileName: string) {
 
   return `${baseName}-${getCurrentDate()}${extension}`;
 }
+
+export function getImgUrl(file: FileTreeItem) {
+  return `https://raw.githubusercontent.com/${config.owner}/${config.repo}/${config.branch}/${file.path}`;
+}
+
+export async function getAllImage(): Promise<FileTreeItem[]> {
+  const res = await getTreeFiles(config.branch, 1);
+
+  // 支持的图片扩展名
+  const imageExtensions = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"];
+
+  // 过滤出图片文件并处理
+  const images = res.tree
+    .filter((item) => item.type === "blob") // 只处理文件
+    .filter((item) => {
+      // 检查是否是图片文件
+      const extension = item.path
+        .toLowerCase()
+        .substring(item.path.lastIndexOf("."));
+      return imageExtensions.includes(extension);
+    })
+    .map((item) => {
+      // 从path中提取文件名
+      const fullPath = item.path;
+      const lastSlashIndex = fullPath.lastIndexOf("/");
+      const fileName =
+        lastSlashIndex === -1
+          ? fullPath
+          : fullPath.substring(lastSlashIndex + 1);
+
+      // 构造返回对象
+      return {
+        ...item,
+        name: fileName,
+        path: fullPath,
+        previewUrl: getImgUrl(item),
+      };
+    });
+
+  return images;
+}

@@ -6,44 +6,6 @@ const branch = "master"; // 或你的默认分支名
 const token =
   "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"; // 需要有repo权限
 
-// export async function getFiles(): Promise<FileInfo[]> {
-//   const url = `https://api.github.com/repos/${owner}/${repo}/contents`;
-//   const res = await fetch(url, {
-//     method: "GET",
-//     headers: {
-//       Authorization: `token ${token}`,
-//       "Content-Type": "application/json",
-//     },
-//   });
-
-//   if (!res.ok) {
-//     throw new Error(`GitHub API error: ${res.status}`);
-//   }
-
-//   const data = await res.json();
-
-//   return data;
-// }
-
-// export async function getTreeFiles(_url?: string): Promise<FileTree> {
-//   const url = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
-//   const res = await fetch(url, {
-//     method: "GET",
-//     headers: {
-//       Authorization: `token ${token}`,
-//       "Content-Type": "application/json",
-//     },
-//   });
-
-//   if (!res.ok) {
-//     throw new Error(`GitHub API error: ${res.status}`);
-//   }
-
-//   const data = await res.json();
-
-//   return data;
-// }
-
 /**
  * 获取树形数据
  * @returns
@@ -193,4 +155,44 @@ export async function deleteFile(file: FileTreeItem) {
   }
 
   return await response.json();
+}
+
+/**
+ * 获取文件夹下的文件，这种方式获取数据没有缓存会是最新的
+ * @param path 文件夹路径
+ * @returns
+ */
+export async function getPathFiles(path: string): Promise<FileTreeItem[]> {
+  const url = `https://api.github.com/repos/liceal/cloud_image/contents/${path}?_time=
+  ${new Date().getTime().toString()}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/vnd.github.v3+json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(
+      `获取路径【${path}】文件失败: ${errorData.message || response.statusText}`
+    );
+  }
+
+  // 转换成FileTreeItem
+  const resData = (await response.json()) as FileContent[];
+
+  const fileTreeItems = resData.map((file) => ({
+    name: file.name,
+    path: file.path,
+    type: { dir: "tree", file: "blob" }[file.type],
+    size: file.size,
+    url: file.url,
+    sha: file.sha,
+  })) as FileTreeItem[];
+
+  return fileTreeItems;
 }

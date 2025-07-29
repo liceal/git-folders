@@ -1,7 +1,24 @@
-export default {
+interface Config {
+  owner: string;
+  repo: string;
+  branch: string;
+  token: string;
+}
+
+let config: Config = {
   owner: "liceal",
   repo: "cloud_image",
   branch: "master", // 或你的默认分支名
   token:
     "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", // 需要有repo权限
 };
+
+export function setConfig(conf: Partial<Config>) {
+  (Object.keys(conf) as Array<keyof Config>).forEach((key) => {
+    if (conf[key] !== undefined) {
+      config[key] = conf[key]!;
+    }
+  });
+}
+
+export default config;
