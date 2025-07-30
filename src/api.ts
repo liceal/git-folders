@@ -1,4 +1,5 @@
-import { addDateToFileAdvanced, getCurrentDate } from "./utils";
+import axios from "axios";
+import { addDateToFileAdvanced } from "./utils";
 
 const owner = "liceal";
 const repo = "cloud_image";
@@ -24,7 +25,9 @@ export async function getTreeFiles(
   if (!cache) {
     url.searchParams.append("_time", new Date().getTime().toString());
   }
-  const res = await fetch(url, {
+
+  const res = await axios({
+    url: url.toString(),
     method: "GET",
     headers: {
       Authorization: `token ${token}`,
@@ -32,78 +35,79 @@ export async function getTreeFiles(
     },
   });
 
-  if (!res.ok) {
-    throw new Error(`GitHub API error: ${res.status}`);
-  }
-
-  const data = await res.json();
-
-  return data;
+  return res.data;
 }
 
 /**
  * 上传文件到GitHub仓库
- * @param files 文件列表
+ * @param files 文件列表 test.png
  * @param path 目录位置（空字符串表示根目录）
  */
 export async function uploadFile(
-  file: File,
+  files: FileList,
   path: string
-): Promise<{ status: number; data: any; fileName: string }> {
-  // 处理路径格式（确保不以/开头、空路径转为根目录）
-  const normalizedPath = path
-    ? path.replace(/^\//, "").replace(/\/$/, "") // 去除前后多余的斜杠
-    : "";
+): Promise<FileTreeItem[]> {
+  let ps: Promise<{
+    data: {
+      content: {
+        download_url: string;
+        git_url: string;
+        html_url: string;
+        name: string;
+        path: string;
+        sha: string;
+        size: string;
+        type: string;
+        url: string;
+      };
+    };
+  }>[] = [];
+  // const normalizedPath = path
+  //   ? path.replace(/^\//, "").replace(/\/$/, "") // 去除前后多余的斜杠
+  //   : "";
+  const _path = path ? `${path}/` : "";
+  let baseUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${_path}`;
 
-  const baseUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${
-    normalizedPath ? `${normalizedPath}/` : ""
-  }`;
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
 
-  try {
-    let fileName = addDateToFileAdvanced(file.name);
-
-    // 检查文件大小限制（GitHub限制单文件≤100MB）
     if (file.size > 100 * 1024 * 1024) {
-      throw new Error(`文件 ${file.name} 超过100MB限制`);
+      throw new Error(`文件 ${file.name} 大小超过100MB`);
     }
 
-    // 读取文件内容为Base64
+    // 处理成新名字
+    const fileName = addDateToFileAdvanced(file.name, i || "");
     const content = await readFileAsBase64(file);
-
-    // 构建文件路径（处理空目录情况）
-    // const filePath = normalizedPath
-    //   ? `${normalizedPath}/${file.name}`
-    //   : file.name;
-
-    const response = await fetch(`${baseUrl}${fileName}`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        Accept: "application/vnd.github.v3+json",
-      },
-      body: JSON.stringify({
-        message: fileName,
-        content: content,
-        branch: branch,
-      }),
-    });
-
-    const data = await response.json();
-
-    return {
-      status: response.status,
-      data: data,
-      fileName: file.name,
-    };
-  } catch (error: any) {
-    console.error(`上传文件 ${file.name} 失败:`, error);
-    return {
-      status: error.response?.status || 500,
-      data: { error: error.message },
-      fileName: file.name,
-    };
+    ps.push(
+      axios({
+        url: `${baseUrl}${fileName}`,
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/vnd.github.v3+json",
+        },
+        data: {
+          message: `upload ${fileName}`,
+          content,
+          branch,
+        },
+      })
+    );
   }
+
+  let res = await Promise.all(ps);
+
+  console.log(res);
+
+  return res.map((v) => ({
+    name: v.data.content.name,
+    path: v.data.content.path,
+    sha: v.data.content.sha,
+    type: "blob",
+    previewUrl: v.data.content.download_url,
+    url: v.data.content.url,
+  }));
 }
 
 // 辅助函数：将文件读取为Base64
@@ -132,9 +136,8 @@ function readFileAsBase64(file: File): Promise<string> {
  * @returns {Promise<Object>} API响应
  */
 export async function deleteFile(file: FileTreeItem) {
-  const deleteUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${file.path}`;
-
-  const response = await fetch(deleteUrl, {
+  return axios({
+    url: `https://api.github.com/repos/${owner}/${repo}/contents/${file.path}`,
     method: "DELETE",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -142,19 +145,12 @@ export async function deleteFile(file: FileTreeItem) {
       "Content-Type": "application/json",
       Accept: "application/vnd.github.v3+json",
     },
-    body: JSON.stringify({
+    data: {
       message: `Delete ${file.path}`, // 提交信息
       sha: file.sha, // 必须提供的文件SHA值
       branch: branch, // 可选，指定分支
-    }),
+    },
   });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(`删除失败: ${errorData.message || response.statusText}`);
-  }
-
-  return await response.json();
 }
 
 /**
@@ -166,8 +162,8 @@ export async function getPathFiles(path: string): Promise<FileTreeItem[]> {
   const url = `https://api.github.com/repos/liceal/cloud_image/contents/${path}?_time=
   ${new Date().getTime().toString()}`;
 
-  const response = await fetch(url, {
-    method: "GET",
+  const res = await axios({
+    url,
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
@@ -175,15 +171,8 @@ export async function getPathFiles(path: string): Promise<FileTreeItem[]> {
     },
   });
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(
-      `获取路径【${path}】文件失败: ${errorData.message || response.statusText}`
-    );
-  }
-
   // 转换成FileTreeItem
-  const resData = (await response.json()) as FileContent[];
+  const resData = res.data as FileContent[];
 
   const fileTreeItems = resData.map((file) => ({
     name: file.name,

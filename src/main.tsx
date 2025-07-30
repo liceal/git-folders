@@ -56,7 +56,7 @@ class FilesContainer implements m.Component {
     this.initFiles();
   };
 
-  private onDel = async (file: FileTreeItem, key: number, e: Event) => {
+  private onDel = (file: FileTreeItem, key: number, e: Event) => {
     const target = e.target as HTMLElement;
     const fileBlock = target.closest("#file_block");
 
@@ -75,8 +75,14 @@ class FilesContainer implements m.Component {
     // 删除前记录文件夹指针位置 避免在删除过程中切换文件夹
     let _files = files;
 
-    await deleteFile(file);
-    delete _files?.tree[key];
+    deleteFile(file)
+      .then((res) => {
+        delete _files?.tree[key];
+        m.redraw();
+      })
+      .catch((res) => {
+        alert("删除失败请重试");
+      });
   };
 
   async oninit() {
@@ -176,31 +182,25 @@ class Upload implements m.Component {
       if (e.dataTransfer?.files) {
         let fs = e.dataTransfer.files;
 
-        if (fs.length > 1) {
-          alert("一次只能上传一张图片，太多接口会报错");
-          this.isDragging = false;
-          return;
-        }
-
         this.isUploading = true;
         m.redraw();
 
-        let newFile = await uploadFile(fs[0], getCurrentPath());
+        uploadFile(fs, getCurrentPath())
+          .then((newFiles) => {
+            files?.tree.splice(files.tree.length, 0, ...newFiles);
 
-        files?.tree.push({
-          path: newFile.data.content.path,
-          sha: newFile.data.content.sha,
-          size: newFile.data.content.size,
-          type: "blob",
-          url: newFile.data.content.url,
-          name: newFile.data.content.name,
-        });
-        this.isUploading = false;
-        this.isDragging = false;
+            console.log(files);
 
-        console.log(files);
-
-        m.redraw();
+            this.isUploading = false;
+            this.isDragging = false;
+            m.redraw();
+          })
+          .catch((e) => {
+            console.error(e);
+            this.isUploading = false;
+            this.isDragging = false;
+            alert("上传错误");
+          });
       }
     });
   }

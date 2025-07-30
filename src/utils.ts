@@ -76,14 +76,22 @@ export function getCurrentDate() {
 }
 
 // 文件名加上当前容器
-export function addDateToFileAdvanced(fileName: string) {
+export function addDateToFileAdvanced(
+  fileName: string,
+  appendStr: string | number
+) {
   // 处理文件名部分
   const lastDotIndex = fileName.lastIndexOf(".");
   const baseName =
     lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName;
   const extension = lastDotIndex > 0 ? fileName.substring(lastDotIndex) : "";
+  const names = [baseName, getCurrentDate()];
 
-  return `${baseName}-${getCurrentDate()}${extension}`;
+  if (appendStr) {
+    names.push(String(appendStr));
+  }
+
+  return `${names.join("-")}${extension}`;
 }
 
 export function getImgUrl(file: FileTreeItem) {
