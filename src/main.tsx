@@ -329,15 +329,17 @@ class Setting implements m.Component {
     chrome.storage.sync.set({ config: config }, () => {
       console.log("存储 liceal", config);
     });
+    isSetting = false;
   };
   oninit(vnode: m.Vnode<{}, m._NoLifecycle<this & {}>>) {
     try {
-      this.myConfig = { ...config };
       chrome.storage.sync.get(["config"], (res) => {
         console.log("config配置", res);
+        this.myConfig = { ...config, ...res.config };
+        m.redraw();
       });
     } catch (e) {
-      console.log(e);
+      console.error(e);
     }
   }
   view() {
