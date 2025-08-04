@@ -10,7 +10,7 @@ let config: ConfigTypes = {
   repo: "cloud_image",
   branch: "master", // 或你的默认分支名
   token:
-    "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", // 需要有repo权限
+    "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", // 需要有repo权限
 };
 
 export function setConfig(conf: Partial<ConfigTypes>) {
