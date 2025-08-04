@@ -1,11 +1,6 @@
 import axios from "axios";
 import { addDateToFileAdvanced } from "./utils";
-
-const owner = "liceal";
-const repo = "cloud_image";
-const branch = "master"; // 或你的默认分支名
-const token =
-  "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"; // 需要有repo权限
+import config from "./config";
 
 /**
  * 获取树形数据
@@ -17,7 +12,9 @@ export async function getTreeFiles(
   cache?: true
 ): Promise<FileTree> {
   let url = new URL(
-    `https://api.github.com/repos/${owner}/${repo}/git/trees/${sha || branch}`
+    `https://api.github.com/repos/${config.owner}/${config.repo}/git/trees/${
+      sha || config.branch
+    }`
   );
   if (recursive) {
     url.searchParams.append("recursive", recursive.toString());
@@ -30,7 +27,7 @@ export async function getTreeFiles(
     url: url.toString(),
     method: "GET",
     headers: {
-      Authorization: `token ${token}`,
+      Authorization: `token ${config.token}`,
       "Content-Type": "application/json",
     },
   });
@@ -66,7 +63,7 @@ export async function uploadFile(
   //   ? path.replace(/^\//, "").replace(/\/$/, "") // 去除前后多余的斜杠
   //   : "";
   const _path = path ? `${path}/` : "";
-  let baseUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${_path}`;
+  let baseUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${_path}`;
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -83,14 +80,14 @@ export async function uploadFile(
         url: `${baseUrl}${fileName}`,
         method: "PUT",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${config.token}`,
           "Content-Type": "application/json",
           Accept: "application/vnd.github.v3+json",
         },
         data: {
           message: `upload ${fileName}`,
           content,
-          branch,
+          branch: config.branch,
         },
       })
     );
@@ -137,10 +134,10 @@ function readFileAsBase64(file: File): Promise<string> {
  */
 export async function deleteFile(file: FileTreeItem) {
   return axios({
-    url: `https://api.github.com/repos/${owner}/${repo}/contents/${file.path}`,
+    url: `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${file.path}`,
     method: "DELETE",
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${config.token}`,
       "User-Agent": "GitHub-File-Delete-Script",
       "Content-Type": "application/json",
       Accept: "application/vnd.github.v3+json",
@@ -148,7 +145,7 @@ export async function deleteFile(file: FileTreeItem) {
     data: {
       message: `Delete ${file.path}`, // 提交信息
       sha: file.sha, // 必须提供的文件SHA值
-      branch: branch, // 可选，指定分支
+      branch: config.branch, // 可选，指定分支
     },
   });
 }
@@ -165,7 +162,7 @@ export async function getPathFiles(path: string): Promise<FileTreeItem[]> {
   const res = await axios({
     url,
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${config.token}`,
       "Content-Type": "application/json",
       Accept: "application/vnd.github.v3+json",
     },

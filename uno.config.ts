@@ -10,5 +10,12 @@ export default defineConfig({
         "user-drag": "none",
       },
     ],
+    [
+      "scrollbar-none",
+      {
+        "scrollbar-width": "none",
+        "-ms-overflow-style": "none",
+      },
+    ],
   ],
 });

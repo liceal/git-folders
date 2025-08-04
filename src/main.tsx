@@ -2,7 +2,7 @@ import "virtual:uno.css";
 import m from "mithril";
 import { deleteFile, getPathFiles, getTreeFiles, uploadFile } from "./api";
 import { getAllImage, initFilesTree } from "./utils";
-import config, { setConfig } from "./config";
+import config, { ConfigTypes, setConfig } from "./config";
 import styles from "./css.module.scss";
 
 let historyPaths: string[] = [""];
@@ -26,7 +26,7 @@ let AppRef: App;
 class FilesContainer implements m.Component {
   // public files: FileTree | undefined = undefined;
 
-  public async initFiles() {
+  private async initFiles() {
     // const res = await getTreeFiles(dirPaths[dirPaths.length - 1]);
     // files = res;
     // m.redraw();
@@ -46,11 +46,13 @@ class FilesContainer implements m.Component {
     this.initFiles();
   };
 
-  public openPath = (path: string) => {
+  private openPath = (path: string) => {
     if (!linkTree[path]) {
       alert("路径不存在");
       return;
     }
+    // 如果和之前的路径重复则不插入
+    if (historyPaths[historyPaths.length - 1] === path) return;
     historyPaths.push(path);
     currentPathindex = historyPaths.length - 1;
     this.initFiles();
@@ -85,70 +87,272 @@ class FilesContainer implements m.Component {
       });
   };
 
+  private showAddFolderDialog() {
+    const dialog = document.querySelector("#dialog") as HTMLDialogElement;
+    if (dialog) {
+      dialog.showModal();
+      m.render(
+        dialog,
+        <div onclick={(e: Event) => e.stopPropagation()}>
+          <div>创建文件夹</div>
+          <input
+            placeholder="文件夹名称"
+            autofocus
+            class="px-2 py-1"
+            oncreate={(vnode: m.VnodeDOM) => {
+              // 在元素创建后手动调用 focus()
+              (vnode.dom as HTMLInputElement).focus();
+            }}
+            onkeypress={(e: KeyboardEvent & { target: HTMLInputElement }) => {
+              if (e.key === "NumpadEnter" || e.key === "Enter") {
+                let folderName = e.target.value;
+                e.target.value = "";
+                // 当前位置增加文件夹
+                linkTree[getCurrentPath()].tree.push({
+                  name: folderName,
+                  path: `${getCurrentPath()}/${folderName}`,
+                  sha: "",
+                  type: "tree",
+                  url: "",
+                });
+                linkTree[`${getCurrentPath()}/${folderName}`] = {
+                  sha: "",
+                  tree: [],
+                  url: "",
+                  type: "tree",
+                };
+                console.log(linkTree);
+                m.redraw();
+                dialog.close();
+              }
+            }}
+          />
+        </div>
+      );
+    }
+  }
+
+  private prev = () => {
+    currentPathindex--;
+    this.initFiles();
+  };
+
+  private next = () => {
+    currentPathindex++;
+    this.initFiles();
+  };
+
+  private inputPress = (e: KeyboardEvent & { target: HTMLInputElement }) => {
+    if (e.key === "NumpadEnter" || e.key === "Enter") {
+      let path = e.target.value;
+      // 进入文件夹
+      this.openPath(path);
+    }
+  };
+
+  private back = () => {
+    let path = getCurrentPath().split("/").slice(0, -1).join("/");
+    historyPaths.push(path);
+    currentPathindex = historyPaths.length - 1;
+    this.initFiles();
+  };
+
+  private reload = async () => {
+    isLoading = true;
+    console.log(files);
+    // 后台更新树分支
+    const res = await getPathFiles(getCurrentPath());
+    linkTree[getCurrentPath()].tree = res;
+    isLoading = false;
+    m.redraw();
+    console.log(linkTree, getCurrentPath());
+  };
+
+  private pathSplitClick(index: number) {
+    let newPaths = nowPath
+      .split("/")
+      .slice(0, index + 1)
+      .join("/");
+    this.openPath(newPaths);
+  }
+
+  private getBrotherFiles(index: number): FileTreeItem[] {
+    let parentPath = nowPath.split("/").slice(0, index).join("/");
+
+    return linkTree[parentPath].tree;
+  }
+
   async oninit() {
     linkTree = await initFilesTree();
     this.initFiles();
   }
 
   view() {
-    if (!files) {
-      return <div>正在请求</div>;
-    }
-    return (
-      <div class="flex gap-2 flex-wrap">
-        {files.tree.length > 0 ? (
-          files.tree.map((file, key) => {
-            if (file.type === "blob") {
-              return (
-                <div id="file_block" class=" shadow-sm shadow-gray w-70px">
-                  <img
-                    title={file.name}
-                    src={getImgUrl(file)}
-                    alt={file.name}
-                    class="w-70px h-70px object-cover cursor-pointer select-none no-drag"
-                    onclick={() => {
-                      AppRef.openImg(getImgUrl(file));
-                    }}
-                  />
+    const renderContent = () => {
+      if (!config.branch || !config.owner || !config.repo || !config.token) {
+        let dom = [];
+        if (!config.owner) dom.push(<div>请设置用户名</div>);
+        if (!config.repo) dom.push(<div>请设置仓库名称</div>);
+        if (!config.branch) dom.push(<div>请设置分支</div>);
+        if (!config.token) dom.push(<div>请设置token</div>);
+        return dom;
+      }
 
-                  {/* 操作 */}
-                  <div class="flex">
-                    <div
-                      class="i-mdi:delete-circle-outline text-size-2xl text-red cursor-pointer"
-                      onclick={(e: Event) => this.onDel(file, key, e)}
-                    />
-                    <a
-                      href={getImgUrl(file)}
-                      class="i-mdi:eye-circle-outline text-size-2xl text-red cursor-pointer"
-                      target="_blank"
-                    />
-                  </div>
+      if (!files) {
+        return <div>正在请求</div>;
+      }
 
-                  <span class="line-clamp-1 text-sm" title={file.name}>
-                    {file.name}
-                  </span>
-                </div>
-              );
-            } else if (file.type === "tree") {
-              // 文件夹
-              return (
-                <div class="shadow-sm shadow-gray w-70px">
-                  <div
-                    class="i-mdi:folder  object-cover cursor-pointer bg-blue-4 w-70px h-70px"
-                    onclick={() => this.openDir(file)}
-                  />
-                  <span class="line-clamp-1 text-sm" title={file.name}>
-                    {file.name}
-                  </span>
-                </div>
-              );
+      return [
+        <div class="flex items-center">
+          <button disabled={currentPathindex === 0} onclick={this.prev}>
+            <div class="i-mdi:chevron-left" />
+          </button>
+          <button
+            disabled={currentPathindex === historyPaths.length - 1}
+            onclick={this.next}
+          >
+            <div class="i-mdi:chevron-right" />
+          </button>
+          <button disabled={!getCurrentPath()} onclick={this.back}>
+            <div class="i-mdi:chevron-up" />
+          </button>
+
+          <input
+            type="text"
+            id="folderPath"
+            list="folderOptions"
+            placeholder="请输入文件夹路径"
+            autocomplete="off"
+            class="text-left flex-1"
+            onkeypress={this.inputPress}
+            value={nowPath}
+            oninput={(e: Event & { target: { value: string } }) =>
+              (nowPath = e.target.value)
             }
-          })
-        ) : (
-          <div class="flex items-center justify-center text-2xl text-gray h-100px w-full">
-            <span class="i-mdi:folder-hidden" /> 空文件夹
+          />
+          <datalist id="folderOptions">
+            {Object.keys(linkTree).map((path) => {
+              return <option value={path}></option>;
+            })}
+          </datalist>
+
+          <div
+            class={`
+              cursor-pointer
+              float-end
+              ${isLoading ? "i-mdi:loading animate-spin" : "i-mdi:reload"}
+              `}
+            onclick={this.reload}
+          />
+        </div>,
+
+        <div class="flex">
+          <div
+            class="mx-1 bg-gray-1 cursor-pointer"
+            onclick={() => this.pathSplitClick(-1)}
+          >
+            根目录
           </div>
-        )}
+
+          {nowPath &&
+            nowPath.split("/").map((path, index) => {
+              return (
+                <div
+                  class="mx-1 bg-gray-1 cursor-pointer relative group"
+                  onclick={() => this.pathSplitClick(index)}
+                >
+                  {path}
+                  <div class="absolute z-10 bg-gray hidden group-hover:block">
+                    {this.getBrotherFiles(index).map((file) => {
+                      if (file.type === "tree") {
+                        return (
+                          <div
+                            class="cursor-pointer hover:text-red"
+                            onclick={() => this.openPath(file.path)}
+                          >
+                            {file.name}
+                          </div>
+                        );
+                      }
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+          <button onclick={this.showAddFolderDialog}>
+            <div class="i-mdi:folder-plus text-green text-xl" />
+          </button>
+        </div>,
+
+        <div class="flex gap-2 flex-wrap">
+          {files.tree.length > 0 ? (
+            files.tree.map((file, key) => {
+              if (file.type === "blob") {
+                return (
+                  <div id="file_block" class=" shadow-sm shadow-gray w-70px">
+                    <img
+                      title={file.name}
+                      src={getImgUrl(file)}
+                      alt={file.name}
+                      class="w-70px h-70px object-cover cursor-pointer select-none no-drag"
+                      onclick={() => {
+                        AppRef.openImg(getImgUrl(file));
+                      }}
+                    />
+
+                    {/* 操作 */}
+                    <div class="flex">
+                      <div
+                        class="i-mdi:delete-circle-outline text-size-2xl text-red cursor-pointer"
+                        onclick={(e: Event) => this.onDel(file, key, e)}
+                      />
+                      <a
+                        href={getImgUrl(file)}
+                        class="i-mdi:eye-circle-outline text-size-2xl text-red cursor-pointer"
+                        target="_blank"
+                      />
+                    </div>
+
+                    <span
+                      class="text-sm overflow-auto whitespace-nowrap flex scrollbar-none"
+                      title={file.name}
+                    >
+                      {file.name}
+                    </span>
+                  </div>
+                );
+              } else if (file.type === "tree") {
+                // 文件夹
+                return (
+                  <div class="shadow-sm shadow-gray w-70px">
+                    <div
+                      class="i-mdi:folder  object-cover cursor-pointer bg-blue-4 w-70px h-70px"
+                      onclick={() => this.openDir(file)}
+                    />
+                    <span class="line-clamp-1 text-sm" title={file.name}>
+                      {file.name}
+                    </span>
+                  </div>
+                );
+              }
+            })
+          ) : (
+            <div class="flex items-center justify-center text-2xl text-gray h-100px w-full">
+              <span class="i-mdi:folder-hidden" /> 空文件夹
+            </div>
+          )}
+        </div>,
+      ];
+    };
+
+    return (
+      <div id="main" class="w-304px relative">
+        <div>
+          <button onclick={() => (isSetting = true)}>设置</button>
+          <button onclick={() => (isPreviewImg = true)}>预览所有图片</button>
+        </div>
+        {renderContent()}
       </div>
     );
   }
@@ -250,16 +454,15 @@ class PreviewImg implements m.Component {
         let currentMargin = parseInt(window.getComputedStyle(box1).marginTop);
         if (e.ctrlKey) {
           if (e.deltaY > 0) {
-            console.log("小");
+            // console.log("小");
             this.columnCount++;
           } else {
-            console.log("大");
+            // console.log("大");
             if (this.columnCount > 1) {
               this.columnCount--;
             }
           }
           m.redraw();
-
           return;
         }
 
@@ -333,9 +536,12 @@ class Setting implements m.Component {
   };
   oninit(vnode: m.Vnode<{}, m._NoLifecycle<this & {}>>) {
     try {
+      this.myConfig = { ...config };
+      m.redraw();
       chrome.storage.sync.get(["config"], (res) => {
         console.log("config配置", res);
         this.myConfig = { ...config, ...res.config };
+        setConfig(this.myConfig);
         m.redraw();
       });
     } catch (e) {
@@ -346,7 +552,7 @@ class Setting implements m.Component {
     return (
       <div>
         <div>
-          用户
+          用户名
           <input
             value={this.myConfig.owner}
             oninput={(e: Event & { target: { value: string } }) =>
@@ -388,103 +594,6 @@ class Setting implements m.Component {
   }
 }
 class App implements m.Component {
-  private filesContainerRef?: FilesContainer;
-
-  public prev = () => {
-    currentPathindex--;
-    this.filesContainerRef?.initFiles();
-  };
-
-  public next = () => {
-    currentPathindex++;
-    this.filesContainerRef?.initFiles();
-  };
-
-  public back = () => {
-    let path = getCurrentPath().split("/").slice(0, -1).join("/");
-    historyPaths.push(path);
-    currentPathindex = historyPaths.length - 1;
-    this.filesContainerRef?.initFiles();
-  };
-
-  public reload = async () => {
-    isLoading = true;
-    console.log(files);
-    // 后台更新树分支
-    const res = await getPathFiles(getCurrentPath());
-    linkTree[getCurrentPath()].tree = res;
-    isLoading = false;
-    m.redraw();
-    console.log(linkTree, getCurrentPath());
-  };
-
-  private inputPress = (e: KeyboardEvent & { target: HTMLInputElement }) => {
-    if (e.key === "NumpadEnter" || e.key === "Enter") {
-      let path = e.target.value;
-      // 进入文件夹
-      this.filesContainerRef?.openPath(path);
-    }
-  };
-
-  private pathSplitClick(index: number) {
-    let newPaths = nowPath
-      .split("/")
-      .slice(0, index + 1)
-      .join("/");
-    this.filesContainerRef?.openPath(newPaths);
-  }
-
-  private getBrotherFiles(index: number): FileTreeItem[] {
-    let parentPath = nowPath.split("/").slice(0, index).join("/");
-
-    return linkTree[parentPath].tree;
-  }
-
-  private showAddFolderDialog() {
-    const dialog = document.querySelector("#dialog") as HTMLDialogElement;
-    if (dialog) {
-      dialog.showModal();
-      m.render(
-        dialog,
-        <div onclick={(e: Event) => e.stopPropagation()}>
-          <div>创建文件夹</div>
-          <input
-            placeholder="文件夹名称"
-            autofocus
-            class="px-2 py-1"
-            oncreate={(vnode: m.VnodeDOM) => {
-              // 在元素创建后手动调用 focus()
-              (vnode.dom as HTMLInputElement).focus();
-            }}
-            onkeypress={(e: KeyboardEvent & { target: HTMLInputElement }) => {
-              if (e.key === "NumpadEnter" || e.key === "Enter") {
-                let folderName = e.target.value;
-                e.target.value = "";
-                // 当前位置增加文件夹
-                linkTree[getCurrentPath()].tree.push({
-                  name: folderName,
-                  path: `${getCurrentPath()}/${folderName}`,
-                  sha: "",
-                  type: "tree",
-                  url: "",
-                });
-                linkTree[`${getCurrentPath()}/${folderName}`] = {
-                  sha: "",
-                  tree: [],
-                  url: "",
-                  type: "tree",
-                };
-                console.log(linkTree);
-                m.redraw();
-                dialog.close();
-              }
-            }}
-          />
-        </div>
-      );
-    }
-  }
-
   public openImg = (url: string) => {
     console.log("打开图片");
 
@@ -504,6 +613,19 @@ class App implements m.Component {
 
   oninit(vnode: m.Vnode) {
     AppRef = vnode.state as App;
+
+    // 获取最新config
+    try {
+      chrome.storage.sync.get(["config"], (res) => {
+        console.log("config配置", res);
+        if (res.config) {
+          setConfig(res.config);
+          m.redraw();
+        }
+      });
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   view() {
@@ -513,110 +635,7 @@ class App implements m.Component {
     } else if (isPreviewImg) {
       Content = <PreviewImg />;
     } else {
-      Content = (
-        <div id="main" class="p-4 w-304px relative">
-          <div>
-            <button onclick={() => (isSetting = true)}>设置</button>
-            <button onclick={() => (isPreviewImg = true)}>预览所有图片</button>
-          </div>
-
-          <div class="flex items-center">
-            <button disabled={currentPathindex === 0} onclick={this.prev}>
-              <div class="i-mdi:chevron-left" />
-            </button>
-            <button
-              disabled={currentPathindex === historyPaths.length - 1}
-              onclick={this.next}
-            >
-              <div class="i-mdi:chevron-right" />
-            </button>
-            <button
-              disabled={getCurrentPath().split("/").length === 1}
-              onclick={this.back}
-            >
-              <div class="i-mdi:chevron-up" />
-            </button>
-
-            <input
-              type="text"
-              id="folderPath"
-              list="folderOptions"
-              placeholder="请输入文件夹路径"
-              autocomplete="off"
-              class="text-left flex-1"
-              onkeypress={this.inputPress}
-              value={nowPath}
-              oninput={(e: Event & { target: { value: string } }) =>
-                (nowPath = e.target.value)
-              }
-            />
-            <datalist id="folderOptions">
-              {Object.keys(linkTree).map((path) => {
-                return <option value={path}></option>;
-              })}
-            </datalist>
-
-            <div
-              class={`
-              cursor-pointer
-              float-end
-              ${isLoading ? "i-mdi:loading animate-spin" : "i-mdi:reload"}
-              `}
-              onclick={this.reload}
-            />
-          </div>
-
-          {/* 输入框解析可点击 */}
-          <div class="flex">
-            <div
-              class="mx-1 bg-gray-1 cursor-pointer"
-              onclick={() => this.pathSplitClick(-1)}
-            >
-              根目录
-            </div>
-
-            {nowPath &&
-              nowPath.split("/").map((path, index) => {
-                return (
-                  <div
-                    class="mx-1 bg-gray-1 cursor-pointer relative group"
-                    onclick={() => this.pathSplitClick(index)}
-                  >
-                    {path}
-                    <div class="absolute z-10 bg-gray hidden group-hover:block">
-                      {this.getBrotherFiles(index).map((file) => {
-                        if (file.type === "tree") {
-                          return (
-                            <div
-                              class="cursor-pointer hover:text-red"
-                              onclick={() =>
-                                this.filesContainerRef?.openPath(file.path)
-                              }
-                            >
-                              {file.name}
-                            </div>
-                          );
-                        }
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-
-            <button onclick={this.showAddFolderDialog}>
-              <div class="i-mdi:folder-plus text-green text-xl" />
-            </button>
-          </div>
-
-          <FilesContainer
-            oninit={(vnode) => {
-              this.filesContainerRef = vnode.state as FilesContainer;
-            }}
-          />
-
-          <Upload />
-        </div>
-      );
+      Content = [<FilesContainer />, <Upload />];
     }
 
     return [
