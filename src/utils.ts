@@ -1,5 +1,5 @@
 import { getTreeFiles } from "./api";
-import config from "./config";
+import config, { setConfig } from "./config";
 
 /*
   把完整树转成连表关系 顶级path是分支名称 如 master
@@ -133,4 +133,17 @@ export async function getAllImage(): Promise<FileTreeItem[]> {
     });
 
   return images;
+}
+
+export function syncChromeConfig(callback: () => void) {
+  if (chrome.storage?.sync) {
+    chrome.storage.sync.get(["config"], (res) => {
+      if (res.config) {
+        setConfig(res.config);
+      }
+      callback();
+    });
+  } else {
+    callback();
+  }
 }

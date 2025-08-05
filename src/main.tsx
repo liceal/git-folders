@@ -1,7 +1,7 @@
 import "virtual:uno.css";
 import m from "mithril";
 import { deleteFile, getPathFiles, getTreeFiles, uploadFile } from "./api";
-import { getAllImage, initFilesTree } from "./utils";
+import { getAllImage, initFilesTree, syncChromeConfig } from "./utils";
 import config, { ConfigTypes, setConfig } from "./config";
 import styles from "./css.module.scss";
 
@@ -22,6 +22,29 @@ let isSetting = false; //是否设置页面
 let isPreviewImg = false; //是否预览所有图片
 
 let AppRef: App;
+
+// 初始化文件容器，刷新文件树并且到根目录
+function initFilesContainer() {
+  syncChromeConfig(async () => {
+    try {
+      isLoading = true;
+      linkTree = await initFilesTree();
+      historyPaths = [""];
+      nowPath = "";
+      currentPathindex = 0;
+      files = linkTree[nowPath];
+      isLoading = false;
+      m.redraw();
+    } catch (e: any) {
+      console.error(e.response);
+      alert(
+        `请求错误 ${JSON.stringify(e.response.data)} token:${
+          e.response.config.headers.Authorization
+        }`
+      );
+    }
+  });
+}
 
 class FilesContainer implements m.Component {
   // public files: FileTree | undefined = undefined;
@@ -183,8 +206,7 @@ class FilesContainer implements m.Component {
   }
 
   async oninit() {
-    linkTree = await initFilesTree();
-    this.initFiles();
+    initFilesContainer();
   }
 
   view() {
@@ -198,7 +220,7 @@ class FilesContainer implements m.Component {
         return dom;
       }
 
-      if (!files) {
+      if (isLoading) {
         return <div>正在请求</div>;
       }
 
@@ -236,14 +258,14 @@ class FilesContainer implements m.Component {
             })}
           </datalist>
 
-          <div
-            class={`
-              cursor-pointer
-              float-end
-              ${isLoading ? "i-mdi:loading animate-spin" : "i-mdi:reload"}
-              `}
-            onclick={this.reload}
-          />
+          {isLoading ? (
+            <div class="float-end i-mdi:loading animate-spin" />
+          ) : (
+            <div
+              class="cursor-pointer float-end i-mdi:reload"
+              onclick={this.reload}
+            />
+          )}
         </div>,
 
         <div class="flex">
@@ -286,7 +308,7 @@ class FilesContainer implements m.Component {
         </div>,
 
         <div class="flex gap-2 flex-wrap">
-          {files.tree.length > 0 ? (
+          {files && files.tree.length > 0 ? (
             files.tree.map((file, key) => {
               if (file.type === "blob") {
                 return (
@@ -527,12 +549,13 @@ class Setting implements m.Component {
     branch: "",
     token: "",
   };
-  private save = () => {
+  private save = async () => {
     setConfig(this.myConfig);
     chrome.storage.sync.set({ config: config }, () => {
       console.log("存储 liceal", config);
     });
     isSetting = false;
+    initFilesContainer();
   };
   oninit(vnode: m.Vnode<{}, m._NoLifecycle<this & {}>>) {
     try {
