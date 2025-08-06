@@ -102,12 +102,17 @@ class FilesContainer implements m.Component {
 
     deleteFile(file)
       .then((res) => {
-        delete _files?.tree[key];
+        _files?.tree.splice(key, 1);
         m.redraw();
       })
       .catch((res) => {
         alert("删除失败请重试");
       });
+  };
+
+  private onDelEmptyFolder = (file: FileTreeItem, key: number) => {
+    if (file.type !== "tree") return;
+    files?.tree.splice(key, 1);
   };
 
   private showAddFolderDialog() {
@@ -130,15 +135,17 @@ class FilesContainer implements m.Component {
               if (e.key === "NumpadEnter" || e.key === "Enter") {
                 let folderName = e.target.value;
                 e.target.value = "";
+                let p_folder = getCurrentPath() ? `${getCurrentPath()}/` : "";
+
                 // 当前位置增加文件夹
                 linkTree[getCurrentPath()].tree.push({
                   name: folderName,
-                  path: `${getCurrentPath()}/${folderName}`,
+                  path: `${p_folder}${folderName}`,
                   sha: "",
                   type: "tree",
                   url: "",
                 });
-                linkTree[`${getCurrentPath()}/${folderName}`] = {
+                linkTree[`${p_folder}${folderName}`] = {
                   sha: "",
                   tree: [],
                   url: "",
@@ -205,6 +212,11 @@ class FilesContainer implements m.Component {
     return linkTree[parentPath].tree;
   }
 
+  // 是否空文件夹
+  private isEmptyFolder(file: FileTreeItem): Boolean {
+    return linkTree[file.path].tree.length === 0;
+  }
+
   async oninit() {
     initFilesContainer();
   }
@@ -268,7 +280,7 @@ class FilesContainer implements m.Component {
           )}
         </div>,
 
-        <div class="flex">
+        <div class="flex flex-wrap">
           <div
             class="mx-1 bg-gray-1 cursor-pointer"
             onclick={() => this.pathSplitClick(-1)}
@@ -302,8 +314,36 @@ class FilesContainer implements m.Component {
               );
             })}
 
-          <button onclick={this.showAddFolderDialog}>
-            <div class="i-mdi:folder-plus text-green text-xl" />
+          <button onclick={this.showAddFolderDialog} title="新建文件夹">
+            <div class="i-mdi:folder-plus text-blue text-xl" />
+          </button>
+
+          {/* 上传文件 */}
+          <button
+            onclick={() => document.getElementById("fileInput")?.click()}
+            title="上传文件"
+          >
+            <div class="i-mdi:file-document-plus text-orange text-xl" />
+            <input
+              class="hidden"
+              type="file"
+              id="fileInput"
+              multiple
+              onchange={(e: Event) => {
+                const newFiles = (e.target as HTMLInputElement).files;
+                if (newFiles) {
+                  uploadFile(newFiles, getCurrentPath())
+                    .then((newFiles) => {
+                      files?.tree.splice(files.tree.length, 0, ...newFiles);
+                      m.redraw();
+                    })
+                    .catch((e) => {
+                      console.error(e);
+                      alert("上传错误");
+                    });
+                }
+              }}
+            />
           </button>
         </div>,
 
@@ -349,12 +389,28 @@ class FilesContainer implements m.Component {
                 return (
                   <div class="shadow-sm shadow-gray w-70px">
                     <div
-                      class="i-mdi:folder  object-cover cursor-pointer bg-blue-4 w-70px h-70px"
+                      class={`object-cover cursor-pointer bg-blue-4 w-70px h-70px ${
+                        this.isEmptyFolder(file)
+                          ? "i-mdi:folder-hidden"
+                          : "i-mdi:folder"
+                      }`}
                       onclick={() => this.openDir(file)}
                     />
                     <span class="line-clamp-1 text-sm" title={file.name}>
                       {file.name}
                     </span>
+                    {this.isEmptyFolder(file) ? (
+                      <div
+                        class="i-mdi:delete-circle-outline text-size-2xl text-red cursor-pointer"
+                        onclick={(e: Event) => this.onDelEmptyFolder(file, key)}
+                      />
+                    ) : (
+                      <div class="text-xs">
+                        <span class="text-green-500" title="文件数量">
+                          {linkTree[file.path].tree.length}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               }
