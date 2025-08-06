@@ -1,7 +1,7 @@
 {
   "name": "GitFolders",
   "description": "github文件管理",
-  "version": "1.02",
+  "version": "1.03",
   "manifest_version": 3,
   "action": {
     "default_popup": "index.html",
